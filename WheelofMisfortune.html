@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Wheel of Misfortune</title>
+
+<style>
+  body {
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    min-height:100vh;
+    margin:0;
+    background:#f4f6f8;
+  }
+
+  .wrap {
+    display:flex;
+    gap:30px;
+    flex-wrap:wrap;
+    justify-content:center;
+    padding:20px;
+  }
+
+  canvas {
+    width:420px;
+    height:420px;
+    border-radius:50%;
+    box-shadow:0 15px 40px rgba(0,0,0,.15);
+    background:#fff;
+  }
+
+  textarea {
+    width:320px;
+    height:240px;
+    padding:10px;
+    font-size:14px;
+  }
+
+  button {
+    padding:8px 14px;
+    margin-right:6px;
+    cursor:pointer;
+  }
+
+  .result {
+    margin-top:12px;
+    font-weight:700;
+    font-size:18px;
+  }
+
+  .pointer {
+    width:0;
+    height:0;
+    border-left:16px solid transparent;
+    border-right:16px solid transparent;
+    border-bottom:26px solid #111;
+    margin:0 auto -6px auto;
+    position:relative;
+    z-index:10;
+  }
+
+  h1 {
+    text-align:center;
+    margin-bottom:10px;
+  }
+</style>
+</head>
+
+<body>
+
+<div class="wrap">
+
+  <div>
+    <h1>Wheel of Misfortune</h1>
+    <div class="pointer"></div>
+    <canvas id="wheel" width="800" height="800"></canvas>
+
+    <div style="text-align:center; margin-top:14px;">
+      <button id="spinBtn">SPIN</button>
+      <button id="shuffleBtn">Shuffle</button>
+    </div>
+
+    <div class="result" id="result"></div>
+  </div>
+
+  <div>
+    <div style="font-weight:700; margin-bottom:8px;">Names (one per line)</div>
+    <textarea id="namesBox"></textarea>
+    <div style="margin-top:10px;">
+      <button id="applyBtn">Apply</button>
+      <button id="removeBtn">Remove Winner</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let names = [
+  "Tabbi","Peggy","Pike","Lake","JPac","JB","Andy","Donna",
+  "D'Arcy","Tommy","Kelecia","Erich","Brian","Jennifer",
+  "Sunne","Corinne","Kimberly","Bailey","Jess","Katie","Tasha"
+];
+
+const navy = "#2F4F6F";      // light navy
+const gold = "#E3B23C";      // yellow gold
+
+const canvas = document.getElementById("wheel");
+const ctx = canvas.getContext("2d");
+const resultEl = document.getElementById("result");
+const namesBox = document.getElementById("namesBox");
+
+const spinBtn = document.getElementById("spinBtn");
+const shuffleBtn = document.getElementById("shuffleBtn");
+const applyBtn = document.getElementById("applyBtn");
+const removeBtn = document.getElementById("removeBtn");
+
+namesBox.value = names.join("\n");
+
+let angle = 0;
+let spinning = false;
+let lastWinner = null;
+
+function drawWheel() {
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.clearRect(0,0,w,h);
+
+  const cx = w/2;
+  const cy = h/2;
+  const r = w*0.48;
+
+  const slice = (Math.PI*2)/names.length;
+
+  ctx.save();
+  ctx.translate(cx,cy);
+  ctx.rotate(angle);
+  ctx.translate(-cx,-cy);
+
+  for(let i=0;i<names.length;i++){
+    const start = i*slice;
+    const end = start+slice;
+
+    ctx.fillStyle = i%2===0 ? navy : gold;
+
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.arc(cx,cy,r,start,end);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle="#fff";
+    ctx.lineWidth=4;
+    ctx.stroke();
+
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.rotate(start+slice/2);
+    ctx.textAlign="right";
+    ctx.textBaseline="middle";
+    ctx.fillStyle = i%2===0 ? "#fff" : "#000";
+    ctx.font="bold 28px system-ui";
+    ctx.fillText(names[i], r-20,0);
+    ctx.restore();
+  }
+
+  ctx.beginPath();
+  ctx.arc(cx,cy,r*0.08,0,Math.PI*2);
+  ctx.fillStyle="#111";
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function getWinnerFromAngle(){
+  const twoPi = Math.PI*2;
+  const slice = twoPi/names.length;
+
+  const normalized = ((-angle % twoPi)+twoPi)%twoPi;
+  const pointerAngle = (Math.PI*1.5 + normalized)%twoPi;
+
+  const index = Math.floor(pointerAngle/slice)%names.length;
+  return names[index];
+}
+
+function spin(){
+  if(spinning || names.length<2) return;
+  spinning=true;
+  resultEl.textContent="";
+
+  const twoPi=Math.PI*2;
+  const slice=twoPi/names.length;
+
+  const winnerIndex=Math.floor(Math.random()*names.length);
+
+  const desiredAngle = winnerIndex*slice + slice/2;
+  let targetMod=(Math.PI*1.5 - desiredAngle)%twoPi;
+  if(targetMod<0) targetMod+=twoPi;
+
+  const startAngle=angle;
+  const startMod=((startAngle%twoPi)+twoPi)%twoPi;
+  const delta=(targetMod-startMod+twoPi)%twoPi;
+
+  const extraTurns=6+Math.floor(Math.random()*5);
+  const finalAngle=startAngle + extraTurns*twoPi + delta;
+
+  const start=performance.now();
+  const duration=4000 + Math.random()*1500;
+
+  function easeOut(t){ return 1-Math.pow(1-t,3); }
+
+  function frame(now){
+    const t=Math.min(1,(now-start)/duration);
+    angle=startAngle + (finalAngle-startAngle)*easeOut(t);
+    drawWheel();
+
+    if(t<1){
+      requestAnimationFrame(frame);
+    } else {
+      spinning=false;
+      lastWinner=getWinnerFromAngle();
+      resultEl.textContent="Winner: "+lastWinner;
+    }
+  }
+
+  requestAnimationFrame(frame);
+}
+
+function shuffle(arr){
+  for(let i=arr.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]]=[arr[j],arr[i]];
+  }
+  return arr;
+}
+
+spinBtn.onclick=spin;
+shuffleBtn.onclick=()=>{ names=shuffle(names); drawWheel(); };
+applyBtn.onclick=()=>{
+  names=namesBox.value.split("\n").map(n=>n.trim()).filter(Boolean);
+  drawWheel();
+};
+removeBtn.onclick=()=>{
+  if(!lastWinner) return;
+  names=names.filter(n=>n!==lastWinner);
+  namesBox.value=names.join("\n");
+  lastWinner=null;
+  resultEl.textContent="";
+  drawWheel();
+};
+
+drawWheel();
+</script>
+
+</body>
+</html>
